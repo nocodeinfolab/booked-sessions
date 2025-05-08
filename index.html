@@ -359,7 +359,7 @@
     <div class="notification" id="notification"></div>
     
     <script>
-        // DOM elements
+        // DOM elements (same as before)
         const providerName = document.getElementById('providerName');
         const providerRole = document.getElementById('providerRole');
         const providerAvatar = document.getElementById('providerAvatar');
@@ -367,13 +367,13 @@
         const filterSelect = document.getElementById('filterSelect');
         const notification = document.getElementById('notification');
         
-        // Stats elements
+        // Stats elements (same as before)
         const upcomingCount = document.getElementById('upcomingCount');
         const pendingCount = document.getElementById('pendingCount');
         const unpaidCount = document.getElementById('unpaidCount');
         const totalCount = document.getElementById('totalCount');
         
-        // Global variables
+        // Global variables (same as before)
         let providerData = null;
         let bookedSessions = [];
         let filteredSessions = [];
@@ -382,12 +382,24 @@
         window.addEventListener('DOMContentLoaded', function() {
             // Get provider email from URL parameter
             const urlParams = new URLSearchParams(window.location.search);
-            const providerEmail = urlParams.get('id');
+            const providerEmail = urlParams.get('email'); // Changed from 'id' to 'email'
             
             if (!providerEmail) {
-                showNotification('Invalid provider access. Please login through the proper channel.', 3000);
+                showNotification('Please login with your email address. Redirecting...', 3000);
+                // Redirect to login page in a real application
+                setTimeout(() => {
+                    window.location.href = 'login.html'; // Replace with your login page
+                }, 3000);
                 return;
             }
+            
+            // Show loading state
+            sessionsList.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading your dashboard...</p>
+                </div>
+            `;
             
             // Fetch provider data and sessions
             fetchProviderData(providerEmail);
