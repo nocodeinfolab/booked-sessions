@@ -709,27 +709,75 @@
 
         // Format Created At Date
         function formatCreatedAt(timestamp) {
+            // First inspect the timestamp
+            inspectTimestamp(timestamp);
+            
             try {
-                // Handle Firestore Timestamp objects
-                if (timestamp && typeof timestamp === 'object') {
-                    // Newer Firestore SDK format
-                    if (typeof timestamp.toDate === 'function') {
-                        return `Timestamp (${timestamp.seconds}s ${timestamp.nanoseconds}ns)`;
-                    }
-                    // Older Firestore format
-                    else if ('seconds' in timestamp) {
-                        return `Timestamp (${timestamp.seconds}s ${timestamp.nanoseconds}ns)`;
-                    }
+                // Case 1: Modern Firestore Timestamp (v9+)
+                if (timestamp && 
+                    typeof timestamp === 'object' &&
+                    typeof timestamp.toDate === 'function') {
+                    return `Firestore Timestamp: ${timestamp.seconds}s ${timestamp.nanoseconds}ns`;
                 }
                 
-                // Handle other cases
-                return String(timestamp);
+                // Case 2: Older Firestore Timestamp format
+                if (timestamp && 
+                    typeof timestamp === 'object' &&
+                    'seconds' in timestamp &&
+                    'nanoseconds' in timestamp) {
+                    return `Raw Timestamp: ${timestamp.seconds}s ${timestamp.nanoseconds}ns`;
+                }
+                
+                // Case 3: Admin SDK format (_seconds, _nanoseconds)
+                if (timestamp && 
+                    typeof timestamp === 'object' &&
+                    '_seconds' in timestamp &&
+                    '_nanoseconds' in timestamp) {
+                    return `Admin Timestamp: ${timestamp._seconds}s ${timestamp._nanoseconds}ns`;
+                }
+                
+                // Case 4: It's already a string
+                if (typeof timestamp === 'string') {
+                    return timestamp;
+                }
+                
+                // Case 5: Unknown format - show full object
+                try {
+                    return `Unknown format: ${JSON.stringify(timestamp, null, 2)}`;
+                } catch {
+                    return `Unknown timestamp format`;
+                }
+                
             } catch (error) {
-                console.error('Error formatting timestamp:', error);
+                console.error('Timestamp format error:', error);
                 return 'Invalid timestamp';
             }
         }
 
+        function inspectTimestamp(timestamp) {
+            console.group('[Firestore Timestamp Inspection]');
+            console.log('Raw timestamp object:', timestamp);
+            console.log('Type of timestamp:', typeof timestamp);
+            
+            // Check for Firestore Timestamp properties
+            console.log('Has seconds:', 'seconds' in timestamp);
+            console.log('Has nanoseconds:', 'nanoseconds' in timestamp);
+            console.log('Has _seconds:', '_seconds' in timestamp);
+            console.log('Has _nanoseconds:', '_nanoseconds' in timestamp);
+            console.log('Has toDate:', typeof timestamp.toDate === 'function');
+            
+            // Try to convert to JSON
+            try {
+                console.log('JSON.stringify:', JSON.stringify(timestamp));
+            } catch (e) {
+                console.log('Stringify error:', e.message);
+            }
+            
+            console.groupEnd();
+        }
+
+        // Usage - call this before your format function:
+        inspectTimestamp(session.created_at);
 
         // Show Notification
         function showNotification(message, duration = 3000) {
