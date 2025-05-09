@@ -631,10 +631,10 @@
                             <i class="far fa-clock"></i>
                             ${session.booked_time}
                         </div>
-                        <div class="session-booked-date">
-                            <i class="fas fa-history"></i>
-                            ${formatCreatedAt(session.created_at)}
-                        </div>
+                    `<div class="session-booked-date">
+                        <i class="fas fa-history"></i>
+                        ${formatCreatedAt(session.created_at?.toDate?.() || session.created_at)}
+                    </div>`
                         <div class="session-status">
                             ${session.confirmed ? 
                                 '<span class="status-badge status-confirmed"><i class="fas fa-check-circle"></i> Confirmed</span>' : 
@@ -708,23 +708,32 @@
         }
 
         // Format Created At Date
-        function formatCreatedAt(timestamp) {
+                function formatCreatedAt(timestamp) {
             try {
                 if (!timestamp) return 'Date not available';
                 
-                // Handle Firestore Timestamp object
-                if (timestamp.toDate) {
+                // If it's a Firestore Timestamp object
+                if (timestamp.seconds && timestamp.nanoseconds) {
+                    const jsDate = new Date(timestamp.seconds * 1000 + timestamp.nanoseconds / 1000000);
+                    return jsDate.toLocaleString();
+                }
+                
+                // If it's a Firestore Timestamp with toDate() method
+                if (typeof timestamp.toDate === 'function') {
                     return timestamp.toDate().toLocaleString();
                 }
                 
-                // Handle string timestamps
-                if (typeof timestamp === 'string') {
-                    return new Date(timestamp).toLocaleString();
-                }
-                
-                // Handle JavaScript Date objects
+                // If it's already a Date object
                 if (timestamp instanceof Date) {
                     return timestamp.toLocaleString();
+                }
+                
+                // If it's a date string
+                if (typeof timestamp === 'string') {
+                    const date = new Date(timestamp);
+                    if (!isNaN(date.getTime())) {
+                        return date.toLocaleString();
+                    }
                 }
                 
                 return 'Date not available';
