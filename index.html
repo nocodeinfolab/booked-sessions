@@ -588,7 +588,8 @@
                         <h3>Session with ${session.user_name}</h3>
                         <p><i class="far fa-clock"></i> ${session.booked_time}</p>
                         <p><i class="far fa-calendar-alt"></i> ${formattedDate}</p>
-                        <p><i class="fas fa-history"></i> Booked on ${new Date(session.created_at).toLocaleString()}</p>
+                        <p><i class="fas fa-history"></i> Booked on ${formatCreatedAt(session.created_at)}</p>
+
                     </div>
                     <div class="session-status">
                         ${confirmationStatus}
@@ -602,6 +603,44 @@
                 
                 sessionsList.appendChild(sessionCard);
             });
+
+            function formatCreatedAt(dateString) {
+                try {
+                    // Return early if no date string provided
+                    if (!dateString) {
+                        return 'Date not available';
+                    }
+                    
+                    // Check if already in the expected format
+                    const isExpectedFormat = (
+                        dateString.includes('at') && 
+                        dateString.includes('UTC')
+                    );
+                    
+                    // Return formatted string if already in correct format
+                    if (isExpectedFormat) {
+                        return dateString.replace(' ', ' ');  // Normalize special space character
+                    }
+                    
+                    // Attempt to parse as Date object if different format
+                    const date = new Date(dateString);
+                    const isValidDate = !isNaN(date.getTime());
+                    
+                    if (isValidDate) {
+                        return date.toLocaleString();  // Format as local date string
+                    }
+                    
+                    // Fallback to original string if parsing fails
+                    return dateString;
+                    
+                } catch (error) {
+                    console.error('Date formatting error:', error);
+                    
+                    // Graceful fallback for error cases
+                    return dateString || 'Date not available';
+                }
+            }
+
             
             // Add event listeners to confirm buttons
             document.querySelectorAll('.confirm-btn').forEach(button => {
