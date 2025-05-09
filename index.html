@@ -633,7 +633,7 @@
                         </div>
                         <div class="session-booked-date">
                             <i class="fas fa-history"></i>
-                            ${session.created_at}
+                            ${session.created_at?.toDate?.().toLocaleString?.() || 'Date not available'}
                         </div>
                         <div class="session-status">
                             ${session.confirmed ? 
