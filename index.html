@@ -711,22 +711,25 @@
         function formatCreatedAt(timestamp) {
             try {
                 if (!timestamp) return 'Date not available';
-                
-                // Handle Firestore Timestamp object
+
+                // If it's a Firestore Timestamp object with toDate()
                 if (timestamp.toDate) {
                     return timestamp.toDate().toLocaleString();
                 }
-                
-                // Handle string timestamps
-                if (typeof timestamp === 'string') {
-                    return new Date(timestamp).toLocaleString();
-                }
-                
-                // Handle JavaScript Date objects
+
+                // If it's a JS Date object
                 if (timestamp instanceof Date) {
                     return timestamp.toLocaleString();
                 }
-                
+
+                // If it's a string like "May 8, 2025 at 11:41:51 PM UTC+1"
+                if (typeof timestamp === 'string') {
+                    // Clean string to remove 'at' and any special space characters
+                    const cleaned = timestamp.replace('at', '').replace(/\u202F/g, '').trim();
+                    const parsed = new Date(cleaned);
+                    return isNaN(parsed) ? 'Date not available' : parsed.toLocaleString();
+                }
+
                 return 'Date not available';
             } catch (error) {
                 console.error('Date formatting error:', error);
