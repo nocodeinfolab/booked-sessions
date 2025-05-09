@@ -620,7 +620,7 @@
                 const sessionCard = document.createElement('div');
                 sessionCard.className = 'session-card';
                 
-                                sessionCard.innerHTML = `
+                sessionCard.innerHTML = `
                     <div class="session-date">
                         <div class="session-day">${day}</div>
                         <div class="session-month">${month}</div>
@@ -633,7 +633,7 @@
                         </div>
                         <div class="session-booked-date">
                             <i class="fas fa-history"></i>
-                            ${session.created_at?.seconds ? new Date(session.created_at.seconds * 1000).toLocaleString() : 'Date not available'}
+                            ${formatCreatedAt(session.created_at)}
                         </div>
                         <div class="session-status">
                             ${session.confirmed ? 
@@ -710,10 +710,35 @@
         // Format Created At Date
         function formatCreatedAt(timestamp) {
             try {
-                if (!timestamp || typeof timestamp !== 'string') return 'Date not available';
-
-                // Remove anything from "UTC" to the end of the string
-                return timestamp.replace(/\s*UTC[^\s]*/, '').trim();
+                // Check if timestamp is null or undefined
+                if (!timestamp) return 'Date not available';
+                
+                // Check if it's a Firestore Timestamp object
+                if (timestamp.seconds !== undefined && timestamp.nanoseconds !== undefined) {
+                    const jsDate = new Date(timestamp.seconds * 1000);
+                    return jsDate.toLocaleString();
+                }
+                
+                // Check if it has a toDate method
+                if (typeof timestamp.toDate === 'function') {
+                    return timestamp.toDate().toLocaleString();
+                }
+                
+                // Check if it's already a Date object
+                if (timestamp instanceof Date) {
+                    return timestamp.toLocaleString();
+                }
+                
+                // Check if it's a string that can be converted to a date
+                if (typeof timestamp === 'string') {
+                    const date = new Date(timestamp);
+                    if (!isNaN(date.getTime())) {
+                        return date.toLocaleString();
+                    }
+                }
+                
+                // Fallback for unknown formats
+                return 'Date not available';
             } catch (error) {
                 console.error('Date formatting error:', error);
                 return 'Date not available';
