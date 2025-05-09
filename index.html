@@ -162,8 +162,8 @@
             display: grid;
             grid-template-columns: 60px 1fr;
             gap: 15px;
+            position: relative; /* Add this for button positioning */
         }
-
         .session-date {
             background-color: var(--primary);
             color: white;
@@ -353,6 +353,44 @@
             .provider-avatar {
                 width: 50px;
                 height: 50px;
+            }
+        }
+
+        .confirm-btn-container {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            width: 100%; /* Make button full width on mobile */
+        }
+
+        /* Tablet and larger screens */
+        @media (min-width: 768px) {
+            .session-card {
+                grid-template-columns: 80px 2fr 1fr;
+            }
+            
+            .confirm-btn-container {
+                grid-column: auto;
+                margin-top: 0;
+                display: block;
+            }
+            
+            .btn {
+                width: auto; /* Return to natural width on larger screens */
             }
         }
     </style>
@@ -582,7 +620,7 @@
                 const sessionCard = document.createElement('div');
                 sessionCard.className = 'session-card';
                 
-                sessionCard.innerHTML = `
+                                sessionCard.innerHTML = `
                     <div class="session-date">
                         <div class="session-day">${day}</div>
                         <div class="session-month">${month}</div>
@@ -608,14 +646,16 @@
                             }
                         </div>
                     </div>
-                    ${!session.confirmed ? 
-                        `<button class="btn btn-primary confirm-btn" data-session-id="${session.id}">
-                            <i class="fas fa-check"></i> Confirm
-                        </button>` : 
-                        `<button class="btn btn-success" disabled>
-                            <i class="fas fa-check"></i> Confirmed
-                        </button>`
-                    }
+                    <div class="confirm-btn-container">
+                        ${!session.confirmed ? 
+                            `<button class="btn btn-primary confirm-btn" data-session-id="${session.id}">
+                                <i class="fas fa-check"></i> Confirm
+                            </button>` : 
+                            `<button class="btn btn-success" disabled>
+                                <i class="fas fa-check"></i> Confirmed
+                            </button>`
+                        }
+                    </div>
                 `;
                 
                 sessionsList.appendChild(sessionCard);
@@ -668,23 +708,29 @@
         }
 
         // Format Created At Date
-        function formatCreatedAt(dateString) {
+        function formatCreatedAt(timestamp) {
             try {
-                if (!dateString) return 'Date not available';
+                if (!timestamp) return 'Date not available';
                 
-                if (dateString.includes('at') && dateString.includes('UTC')) {
-                    return dateString.replace(' ', ' ');
+                // Handle Firestore Timestamp object
+                if (timestamp.toDate) {
+                    return timestamp.toDate().toLocaleString();
                 }
                 
-                const date = new Date(dateString);
-                if (!isNaN(date.getTime())) {
-                    return date.toLocaleString();
+                // Handle string timestamps
+                if (typeof timestamp === 'string') {
+                    return new Date(timestamp).toLocaleString();
                 }
                 
-                return dateString;
+                // Handle JavaScript Date objects
+                if (timestamp instanceof Date) {
+                    return timestamp.toLocaleString();
+                }
+                
+                return 'Date not available';
             } catch (error) {
-                console.error('Date format error:', error);
-                return dateString || 'Date not available';
+                console.error('Date formatting error:', error);
+                return 'Date not available';
             }
         }
 
