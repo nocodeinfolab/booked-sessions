@@ -6,6 +6,7 @@
     <title>Provider Dashboard | PsyClinic</title>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src='https://meet.jit.si/external_api.js'></script>
     <style>
         :root {
             --primary: #3a86ff;
@@ -162,8 +163,9 @@
             display: grid;
             grid-template-columns: 60px 1fr;
             gap: 15px;
-            position: relative; /* Add this for button positioning */
+            position: relative;
         }
+
         .session-date {
             background-color: var(--primary);
             color: white;
@@ -262,6 +264,80 @@
         .btn-success {
             background-color: var(--success);
             color: white;
+        }
+
+        /* Video Call Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: var(--white);
+            border-radius: var(--radius-md);
+            width: 90%;
+            max-width: 1000px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 15px;
+            background-color: var(--primary);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-weight: 600;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        #jitsiContainer {
+            width: 100%;
+            height: 500px;
+        }
+
+        .modal-footer {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f8f9fa;
+        }
+
+        .session-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .room-number {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .session-timer {
+            font-weight: 600;
+            color: var(--dark);
         }
 
         /* Loading States */
@@ -374,7 +450,7 @@
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            width: 100%; /* Make button full width on mobile */
+            width: 100%;
         }
 
         /* Tablet and larger screens */
@@ -390,7 +466,7 @@
             }
             
             .btn {
-                width: auto; /* Return to natural width on larger screens */
+                width: auto;
             }
         }
     </style>
@@ -451,6 +527,24 @@
         </div>
     </main>
 
+    <!-- Video Call Modal -->
+    <div class="modal" id="videoCallModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Therapy Session</div>
+                <button class="close-modal" id="closeModal">&times;</button>
+            </div>
+            <div id="jitsiContainer"></div>
+            <div class="modal-footer">
+                <div class="session-info">
+                    <div>Room: <span class="room-number" id="roomNumberDisplay">Not started</span></div>
+                    <div>Time: <span class="session-timer" id="sessionTimer">00:00:00</span></div>
+                </div>
+                <button class="btn btn-primary" id="endSessionBtn">End Session</button>
+            </div>
+        </div>
+    </div>
+
     <div class="notification" id="notification"></div>
 
     <script>
@@ -465,11 +559,21 @@
         const pendingCount = document.getElementById('pendingCount');
         const unpaidCount = document.getElementById('unpaidCount');
         const totalCount = document.getElementById('totalCount');
+        const videoCallModal = document.getElementById('videoCallModal');
+        const closeModal = document.getElementById('closeModal');
+        const jitsiContainer = document.getElementById('jitsiContainer');
+        const roomNumberDisplay = document.getElementById('roomNumberDisplay');
+        const sessionTimer = document.getElementById('sessionTimer');
+        const endSessionBtn = document.getElementById('endSessionBtn');
 
         // Global Variables
         let providerData = null;
         let bookedSessions = [];
         let filteredSessions = [];
+        let jitsiApi = null;
+        let currentRoomName = null;
+        let sessionStartTime = null;
+        let timerInterval = null;
 
         // Initialize Dashboard
         document.addEventListener('DOMContentLoaded', () => {
@@ -482,7 +586,126 @@
             }
             
             fetchProviderData(providerEmail);
+            
+            // Event listeners for video call modal
+            closeModal.addEventListener('click', closeVideoCall);
+            endSessionBtn.addEventListener('click', endVideoSession);
         });
+
+        // Generate a random room name
+        function generateRoomName() {
+            const adjectives = ['calm', 'peaceful', 'serene', 'tranquil', 'mindful'];
+            const nouns = ['session', 'meeting', 'discussion', 'conversation', 'therapy'];
+            const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+            const noun = nouns[Math.floor(Math.random() * nouns.length)];
+            const randomNum = Math.floor(Math.random() * 1000);
+            return `therapy-${adj}-${noun}-${randomNum}`;
+        }
+
+        // Start video session
+        function startVideoSession(sessionId) {
+            currentRoomName = generateRoomName();
+            roomNumberDisplay.textContent = currentRoomName;
+            
+            // In a real app, you would save this room name to your database
+            // and notify the client that the session has started
+            
+            openVideoCall();
+            
+            // Show notification with room number
+            showNotification(`Session started. Room: ${currentRoomName}`, 5000);
+            
+            // Start the timer when client joins (in a real app, you'd detect this)
+            // For demo purposes, we'll simulate the client joining after 5 seconds
+            setTimeout(() => {
+                startSessionTimer();
+            }, 5000);
+        }
+
+        // Open video call modal and initialize Jitsi
+        function openVideoCall() {
+            videoCallModal.style.display = 'flex';
+            
+            const domain = 'meet.jit.si';
+            const options = {
+                roomName: currentRoomName,
+                width: '100%',
+                height: '100%',
+                parentNode: jitsiContainer,
+                userInfo: {
+                    displayName: 'Therapist'
+                },
+                configOverwrite: {
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false,
+                    enableWelcomePage: false,
+                    enableClosePage: false
+                },
+                interfaceConfigOverwrite: {
+                    APP_NAME: 'Therapy Session',
+                    SHOW_CHROME_EXTENSION_BANNER: false,
+                    MOBILE_APP_PROMO: false,
+                    HIDE_INVITE_MORE_HEADER: true
+                }
+            };
+            
+            jitsiApi = new JitsiMeetExternalAPI(domain, options);
+            
+            // Handle when meeting is left
+            jitsiApi.addListener('readyToClose', () => {
+                endVideoSession();
+            });
+        }
+
+        // Close video call modal
+        function closeVideoCall() {
+            if (jitsiApi) {
+                jitsiApi.dispose();
+                jitsiApi = null;
+            }
+            
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            videoCallModal.style.display = 'none';
+            jitsiContainer.innerHTML = '';
+            sessionTimer.textContent = '00:00:00';
+            currentRoomName = null;
+        }
+
+        // End video session
+        function endVideoSession() {
+            closeVideoCall();
+            showNotification('Session ended', 3000);
+        }
+
+        // Start session timer
+        function startSessionTimer() {
+            sessionStartTime = new Date();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        // Update timer display
+        function updateTimer() {
+            if (!sessionStartTime) return;
+            
+            const now = new Date();
+            const elapsed = new Date(now - sessionStartTime);
+            
+            const hours = String(elapsed.getUTCHours()).padStart(2, '0');
+            const minutes = String(elapsed.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(elapsed.getUTCSeconds()).padStart(2, '0');
+            
+            sessionTimer.textContent = `${hours}:${minutes}:${seconds}`;
+            
+            // Automatically end after 1 hour (3600 seconds)
+            const elapsedSeconds = Math.floor((now - sessionStartTime) / 1000);
+            if (elapsedSeconds >= 3600) {
+                endVideoSession();
+            }
+        }
 
         // Fetch Provider Data
         async function fetchProviderData(email) {
@@ -651,8 +874,8 @@
                             `<button class="btn btn-primary confirm-btn" data-session-id="${session.id}">
                                 <i class="fas fa-check"></i> Confirm
                             </button>` : 
-                            `<button class="btn btn-success" disabled>
-                                <i class="fas fa-check"></i> Confirmed
+                            `<button class="btn btn-success start-session-btn" data-session-id="${session.id}">
+                                <i class="fas fa-video"></i> Start Session
                             </button>`
                         }
                     </div>
@@ -666,6 +889,14 @@
                 button.addEventListener('click', () => {
                     const sessionId = button.getAttribute('data-session-id');
                     confirmAppointment(sessionId);
+                });
+            });
+            
+            // Add event listeners to start session buttons
+            document.querySelectorAll('.start-session-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const sessionId = button.getAttribute('data-session-id');
+                    startVideoSession(sessionId);
                 });
             });
         }
