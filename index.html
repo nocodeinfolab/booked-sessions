@@ -469,34 +469,6 @@
                 width: auto;
             }
         }
-
-        #videoCallContainer {
-            display: none;
-            width: 100%;
-            height: 600px;
-            margin-top: 20px;
-            border-radius: var(--radius-md);
-            overflow: hidden;
-            box-shadow: var(--shadow-md);
-        }
-        
-        .session-info {
-            margin: 15px 0;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: var(--radius-sm);
-        }
-        
-        .room-number {
-            font-weight: bold;
-            color: var(--primary);
-        }
-        
-        .session-timer {
-            font-size: 1.2rem;
-            font-weight: bold;
-            margin: 10px 0;
-        }
     </style>
 </head>
 <body>
@@ -552,14 +524,6 @@
                     <p>Loading your appointments...</p>
                 </div>
             </div>
-
-            <div id="videoCallContainer"></div>
-            <div class="session-info">
-                <div>Room: <span class="room-number" id="roomNumberDisplay">Not started</span></div>
-                <div>Session Time: <span class="session-timer" id="sessionTimer">00:00:00</span></div>
-                <button class="btn btn-primary" id="endSessionBtn" style="display: none;">End Session</button>
-            </div>
-
         </div>
     </main>
 
@@ -610,8 +574,6 @@
         let currentRoomName = null;
         let sessionStartTime = null;
         let timerInterval = null;
-
-        // Add these new variables
         let currentSessionId = null;
         let clientJoined = false;
 
@@ -646,7 +608,7 @@
         async function startVideoSession(sessionId) {
             currentSessionId = sessionId;
             currentRoomName = generateRoomName();
-            document.getElementById('roomNumberDisplay').textContent = currentRoomName;
+            roomNumberDisplay.textContent = currentRoomName;
             
             try {
                 // Update the session document with the room number
@@ -661,77 +623,105 @@
 
                 if (!response.ok) throw new Error('Failed to update session with room number');
                 
-                // Show the video container
-                document.getElementById('videoCallContainer').style.display = 'block';
-                document.getElementById('endSessionBtn').style.display = 'inline-block';
-                
-                // Initialize Jitsi meeting
-                const domain = 'meet.jit.si';
-                const options = {
-                    roomName: currentRoomName,
-                    width: '100%',
-                    height: '100%',
-                    parentNode: document.getElementById('videoCallContainer'),
-                    userInfo: {
-                        displayName: 'Therapist'
-                    },
-                    configOverwrite: {
-                        startWithAudioMuted: false,
-                        startWithVideoMuted: false,
-                        enableWelcomePage: false,
-                        enableClosePage: false
-                    },
-                    interfaceConfigOverwrite: {
-                        APP_NAME: 'Therapy Session',
-                        SHOW_CHROME_EXTENSION_BANNER: false,
-                        MOBILE_APP_PROMO: false,
-                        HIDE_INVITE_MORE_HEADER: true
-                    }
-                };
-                
-                jitsiApi = new JitsiMeetExternalAPI(domain, options);
-                
-                // Listen for participant joins
-                jitsiApi.addListener('participantJoined', (participant) => {
-                    if (participant.displayName !== 'Therapist') {
-                        startSessionTimer();
-                        showNotification('Client has joined the session', 3000);
-                    }
-                });
-                
-                jitsiApi.addListener('readyToClose', () => {
-                    endVideoSession();
-                });
-                
-                showNotification(`Session started. Room: ${currentRoomName}`, 5000);
+                openVideoCall();
+                showNotification(`Session started. Waiting for client to join...`, 5000);
                 
             } catch (error) {
-                console.error('Error starting session:', error);
+                console.error('Error updating session:', error);
                 showNotification('Failed to start session', 3000);
-                resetVideoSession();
+                currentRoomName = null;
+                currentSessionId = null;
             }
         }
 
-        // Modified endVideoSession function
+        // Open video call modal and initialize Jitsi
+        function openVideoCall() {
+            videoCallModal.style.display = 'flex';
+            
+            const domain = 'meet.jit.si';
+            const options = {
+                roomName: currentRoomName,
+                width: '100%',
+                height: '100%',
+                parentNode: jitsiContainer,
+                userInfo: {
+                    displayName: 'Therapist'
+                },
+                configOverwrite: {
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false,
+                    enableWelcomePage: false,
+                    enableClosePage: false
+                },
+                interfaceConfigOverwrite: {
+                    APP_NAME: 'Therapy Session',
+                    SHOW_CHROME_EXTENSION_BANNER: false,
+                    MOBILE_APP_PROMO: false,
+                    HIDE_INVITE_MORE_HEADER: true
+                }
+            };
+            
+            jitsiApi = new JitsiMeetExternalAPI(domain, options);
+            
+            // Listen for participant events
+            jitsiApi.addListener('participantJoined', (participant) => {
+                if (participant.displayName !== 'Therapist') {
+                    clientJoined = true;
+                    startSessionTimer();
+                    showNotification('Client has joined the session', 3000);
+                }
+            });
+            
+            jitsiApi.addListener('participantLeft', (participant) => {
+                if (participant.displayName !== 'Therapist') {
+                    clientJoined = false;
+                    showNotification('Client has left the session', 3000);
+                }
+            });
+            
+            jitsiApi.addListener('readyToClose', () => {
+                endVideoSession();
+            });
+        }
+
+        // Close video call modal
+        function closeVideoCall() {
+            if (jitsiApi) {
+                jitsiApi.dispose();
+                jitsiApi = null;
+            }
+            
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            clientJoined = false;
+            sessionStartTime = null;
+            videoCallModal.style.display = 'none';
+            jitsiContainer.innerHTML = '';
+            sessionTimer.textContent = '00:00:00';
+        }
+
+        // End video session
         async function endVideoSession() {
             try {
-                if (jitsiApi) {
-                    jitsiApi.dispose();
-                }
-                
+                // Update session status in backend
                 if (currentSessionId) {
                     await fetch('https://firebase-backend-6arf.onrender.com/end_session', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             session_id: currentSessionId,
-                            duration: document.getElementById('sessionTimer').textContent
+                            duration: sessionTimer.textContent
                         })
                     });
                 }
                 
+                closeVideoCall();
                 showNotification('Session ended', 3000);
-                resetVideoSession();
+                currentRoomName = null;
+                currentSessionId = null;
                 
             } catch (error) {
                 console.error('Error ending session:', error);
@@ -739,24 +729,33 @@
             }
         }
 
-        function resetVideoSession() {
-            // Clear video container
-            document.getElementById('videoCallContainer').style.display = 'none';
-            document.getElementById('videoCallContainer').innerHTML = '';
-            document.getElementById('endSessionBtn').style.display = 'none';
+        // Start session timer when client joins
+        function startSessionTimer() {
+            if (sessionStartTime) return; // Already started
             
-            // Reset timer
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
+            sessionStartTime = new Date();
+            timerInterval = setInterval(updateTimer, 1000);
+            showNotification('Session timer started', 2000);
+        }
+
+        // Update timer display
+        function updateTimer() {
+            if (!sessionStartTime) return;
+            
+            const now = new Date();
+            const elapsed = new Date(now - sessionStartTime);
+            
+            const hours = String(elapsed.getUTCHours()).padStart(2, '0');
+            const minutes = String(elapsed.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(elapsed.getUTCSeconds()).padStart(2, '0');
+            
+            sessionTimer.textContent = `${hours}:${minutes}:${seconds}`;
+            
+            // Automatically end after 1 hour (3600 seconds)
+            const elapsedSeconds = Math.floor((now - sessionStartTime) / 1000);
+            if (elapsedSeconds >= 3600) {
+                endVideoSession();
             }
-            document.getElementById('sessionTimer').textContent = '00:00:00';
-            sessionStartTime = null;
-            
-            // Reset variables
-            currentRoomName = null;
-            currentSessionId = null;
-            jitsiApi = null;
         }
 
         // Fetch Provider Data
