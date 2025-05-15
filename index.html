@@ -651,16 +651,18 @@
                 height: '100%',
                 parentNode: jitsiContainer,
                 userInfo: {
-                    displayName: 'Therapist'
+                    displayName: 'Therapist',
+                    email: providerData.email // Optional but helpful
                 },
                 configOverwrite: {
                     startWithAudioMuted: false,
                     startWithVideoMuted: false,
                     enableWelcomePage: false,
                     enableClosePage: false,
-                    disableSimulcast: false,
+                    disableAuth: true, // This disables authentication requirements
                     enableNoisyMicDetection: false,
-                    prejoinPageEnabled: false
+                    prejoinPageEnabled: false,
+                    requireDisplayName: false
                 },
                 interfaceConfigOverwrite: {
                     APP_NAME: 'Therapy Session',
@@ -670,19 +672,18 @@
                     DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
                     TOOLBAR_BUTTONS: [
                         'microphone', 'camera', 'closedcaptions', 'desktop', 'fullscreen',
-                        'fodeviceselection', 'hangup', 'profile', 'chat', 'recording',
-                        'livestreaming', 'etherpad', 'sharedvideo', 'settings', 'raisehand',
+                        'hangup', 'profile', 'chat', 'recording',
+                        'settings', 'raisehand',
                         'videoquality', 'filmstrip', 'invite', 'feedback', 'stats', 'shortcuts',
-                        'tileview', 'videobackgroundblur', 'download', 'help', 'mute-everyone'
+                        'tileview', 'videobackgroundblur', 'help'
                     ]
                 }
             };
             
             jitsiApi = new JitsiMeetExternalAPI(domain, options);
             
-            // Listen for participant events
             jitsiApi.on('participantJoined', (participant) => {
-                if (participant.displayName !== 'Therapist') {
+                if (!participant.displayName.includes('Therapist')) {
                     clientJoined = true;
                     startSessionTimer();
                     showNotification('Client has joined the session', 3000);
@@ -690,7 +691,7 @@
             });
             
             jitsiApi.on('participantLeft', (participant) => {
-                if (participant.displayName !== 'Therapist') {
+                if (!participant.displayName.includes('Therapist')) {
                     clientJoined = false;
                     showNotification('Client has left the session', 3000);
                 }
@@ -700,7 +701,6 @@
                 endVideoSession();
             });
         }
-
         // Close video call modal
         function closeVideoCall() {
             if (jitsiApi) {
