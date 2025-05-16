@@ -580,6 +580,9 @@
         let currentSessionId = null;
         let clientJoined = false;
         let room = null;
+        
+        // Create reference to LiveKit client from global scope
+        const LiveKitClient = window.livekit;
 
         // Initialize Dashboard
         document.addEventListener('DOMContentLoaded', () => {
@@ -604,7 +607,7 @@
             const nouns = ['session', 'meeting', 'discussion', 'conversation', 'therapy'];
             const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
             const noun = nouns[Math.floor(Math.random() * nouns.length)];
-            const randomNum = Math.floor(1000 + Math.random() * 9000); // 4-digit random number
+            const randomNum = Math.floor(1000 + Math.random() * 9000);
             return `therapy-${adj}-${noun}-${randomNum}`;
         }
 
@@ -669,7 +672,7 @@
             
             try {
                 // Connect to the LiveKit room
-                const room = new LiveKitClient.Room();
+                room = new LiveKitClient.Room();
                 
                 // Setup event listeners
                 room
@@ -744,7 +747,7 @@
         }
 
         function startSessionTimer() {
-            if (sessionStartTime) return; // Already started
+            if (sessionStartTime) return;
             
             sessionStartTime = new Date();
             timerInterval = setInterval(updateTimer, 1000);
@@ -772,7 +775,6 @@
 
         async function endVideoSession() {
             try {
-                // Update session status in backend
                 if (currentSessionId) {
                     await fetch('https://firebase-backend-6arf.onrender.com/end_session', {
                         method: 'POST',
@@ -794,6 +796,7 @@
                 showNotification('Error ending session', 3000);
             }
         }
+
         // Fetch Provider Data
         async function fetchProviderData(email) {
             try {
