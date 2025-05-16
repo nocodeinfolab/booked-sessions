@@ -6,7 +6,6 @@
     <title>Provider Dashboard | PsyClinic</title>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/livekit-client@1.0.0/dist/livekit-client.umd.min.js"></script>
     <style>
         :root {
             --primary: #3a86ff;
@@ -601,20 +600,29 @@
         }
 
         // Initialize Dashboard
-        document.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const providerEmail = urlParams.get('email');
-            
-            if (!providerEmail) {
-                showNotification('Please login with your email address', 3000);
-                return;
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Wait for LiveKit to be available
+                LiveKitClient = await waitForLiveKit();
+                
+                const urlParams = new URLSearchParams(window.location.search);
+                const providerEmail = urlParams.get('email');
+                
+                if (!providerEmail) {
+                    showNotification('Please login with your email address', 3000);
+                    return;
+                }
+                
+                fetchProviderData(providerEmail);
+                
+                // Event listeners for video call modal
+                closeModal.addEventListener('click', closeVideoCall);
+                endSessionBtn.addEventListener('click', endVideoSession);
+                
+            } catch (error) {
+                console.error('Failed to initialize LiveKit:', error);
+                showNotification('Failed to initialize video system', 3000);
             }
-            
-            fetchProviderData(providerEmail);
-            
-            // Event listeners for video call modal
-            closeModal.addEventListener('click', closeVideoCall);
-            endSessionBtn.addEventListener('click', endVideoSession);
         });
 
         // Generate a unique room name
@@ -682,17 +690,24 @@
         async function openVideoCall(token, identity) {
             videoCallModal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
-            
-            // Clear previous video elements if any
             livekitContainer.innerHTML = '';
             
             try {
+                if (!LiveKitClient) {
+                    throw new Error('LiveKit client not initialized');
+                }
+
                 // Connect to the LiveKit room
-                room = new LiveKitClient.Room();
+                room = new LiveKitClient.Room({
+                    // Enable more detailed logging
+                    logger: console,
+                    loggerLevel: 'debug'
+                });
                 
                 // Setup event listeners
                 room
                     .on('participantConnected', participant => {
+                        console.log('Participant connected:', participant.identity);
                         if (participant.identity !== identity) {
                             clientJoined = true;
                             startSessionTimer();
@@ -700,37 +715,53 @@
                         }
                     })
                     .on('participantDisconnected', participant => {
+                        console.log('Participant disconnected:', participant.identity);
                         if (participant.identity !== identity) {
                             clientJoined = false;
                             showNotification('Client has left the session', 3000);
                         }
                     })
                     .on('disconnected', () => {
+                        console.log('Disconnected from room');
                         endVideoSession();
                     });
                 
-                // Connect to the room
-                await room.connect('wss://psy-cliniq-s70l8vu6.livekit.cloud', token);
+                // Connect to the room with more options
+                await room.connect('wss://psy-cliniq-s70l8vu6.livekit.cloud', token, {
+                    // Additional connection options
+                    autoSubscribe: true,
+                    maxRetries: 3,
+                    timeout: 10000
+                });
                 
-                // Create local video track
-                const localVideoTrack = await LiveKitClient.createLocalVideoTrack();
+                console.log('Successfully connected to room');
                 
-                // Create a video element for the local track
-                const localVideoElement = document.createElement('video');
-                localVideoElement.autoplay = true;
-                localVideoElement.playsInline = true;
-                localVideoElement.muted = true;
-                localVideoTrack.attach(localVideoElement);
-                livekitContainer.appendChild(localVideoElement);
+                // Create local video track with error handling
+                try {
+                    const localVideoTrack = await LiveKitClient.createLocalVideoTrack({
+                        resolution: 'hd',
+                        facingMode: 'user'
+                    });
+                    
+                    const localVideoElement = document.createElement('video');
+                    localVideoElement.autoplay = true;
+                    localVideoElement.playsInline = true;
+                    localVideoElement.muted = true;
+                    localVideoTrack.attach(localVideoElement);
+                    livekitContainer.appendChild(localVideoElement);
+                } catch (trackError) {
+                    console.error('Error creating video track:', trackError);
+                    showNotification('Could not access camera', 3000);
+                }
                 
-                // Handle remote tracks
+                // Handle remote tracks with more robust checks
                 room.participants.forEach(participant => {
-                    participant.tracks.forEach(track => {
-                        if (track.track && track.kind === LiveKitClient.Track.Kind.Video) {
+                    participant.tracks.forEach(publication => {
+                        if (publication.track && publication.kind === LiveKitClient.Track.Kind.Video) {
                             const videoElement = document.createElement('video');
                             videoElement.autoplay = true;
                             videoElement.playsInline = true;
-                            track.track.attach(videoElement);
+                            publication.track.attach(videoElement);
                             livekitContainer.appendChild(videoElement);
                         }
                     });
