@@ -73,7 +73,7 @@
             color: var(--primary);
             font-size: 1.5rem;
         }
-
+        
         .provider-info {
             display: flex;
             align-items: center;
@@ -614,7 +614,7 @@
             roomNumberDisplay.textContent = currentRoomName;
             
             try {
-                // First, generate a LiveKit token for the provider
+                // Generate LiveKit token
                 const tokenResponse = await fetch('https://firebase-backend-6arf.onrender.com/generate_livekit_token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -626,10 +626,13 @@
                     })
                 });
 
-                if (!tokenResponse.ok) throw new Error('Failed to generate LiveKit token');
+                if (!tokenResponse.ok) {
+                    const errorData = await tokenResponse.json();
+                    throw new Error(errorData.error || 'Failed to generate LiveKit token');
+                }
                 
                 const tokenData = await tokenResponse.json();
-                const { token } = tokenData;
+                const { token, identity } = tokenData;
                 
                 // Save the token in the booked_sessions collection
                 const updateResponse = await fetch('https://firebase-backend-6arf.onrender.com/update_session_token', {
@@ -644,20 +647,19 @@
 
                 if (!updateResponse.ok) throw new Error('Failed to update session with access token');
                 
-                // Open the video call with the generated token
-                openVideoCall(token);
+                // Open the video call with the generated token and identity
+                await openVideoCall(token, identity);
                 showNotification(`Session started. Waiting for client to join...`, 5000);
                 
             } catch (error) {
                 console.error('Error starting session:', error);
-                showNotification('Failed to start session', 3000);
+                showNotification(`Failed to start session: ${error.message}`, 3000);
                 currentRoomName = null;
                 currentSessionId = null;
             }
         }
 
-        // Open video call modal and connect to LiveKit
-        async function openVideoCall(token) {
+        async function openVideoCall(token, identity) {
             videoCallModal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
             
@@ -671,14 +673,14 @@
                 // Setup event listeners
                 room
                     .on('participantConnected', participant => {
-                        if (participant.identity !== `provider-${providerData.uid}`) {
+                        if (participant.identity !== identity) {
                             clientJoined = true;
                             startSessionTimer();
                             showNotification('Client has joined the session', 3000);
                         }
                     })
                     .on('participantDisconnected', participant => {
-                        if (participant.identity !== `provider-${providerData.uid}`) {
+                        if (participant.identity !== identity) {
                             clientJoined = false;
                             showNotification('Client has left the session', 3000);
                         }
@@ -716,12 +718,11 @@
                 
             } catch (error) {
                 console.error('Error connecting to LiveKit:', error);
-                showNotification('Failed to connect to video session', 3000);
+                showNotification('Failed to connect to video session: ' + error.message, 3000);
                 closeVideoCall();
             }
         }
 
-        // Close video call modal
         function closeVideoCall() {
             if (room) {
                 room.disconnect();
@@ -741,7 +742,33 @@
             sessionTimer.textContent = '00:00:00';
         }
 
-        // End video session
+        function startSessionTimer() {
+            if (sessionStartTime) return; // Already started
+            
+            sessionStartTime = new Date();
+            timerInterval = setInterval(updateTimer, 1000);
+            showNotification('Session timer started', 2000);
+        }
+
+        function updateTimer() {
+            if (!sessionStartTime) return;
+            
+            const now = new Date();
+            const elapsed = new Date(now - sessionStartTime);
+            
+            const hours = String(elapsed.getUTCHours()).padStart(2, '0');
+            const minutes = String(elapsed.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(elapsed.getUTCSeconds()).padStart(2, '0');
+            
+            sessionTimer.textContent = `${hours}:${minutes}:${seconds}`;
+            
+            // Automatically end after 1 hour (3600 seconds)
+            const elapsedSeconds = Math.floor((now - sessionStartTime) / 1000);
+            if (elapsedSeconds >= 3600) {
+                endVideoSession();
+            }
+        }
+
         async function endVideoSession() {
             try {
                 // Update session status in backend
@@ -766,36 +793,6 @@
                 showNotification('Error ending session', 3000);
             }
         }
-
-        // Start session timer when client joins
-        function startSessionTimer() {
-            if (sessionStartTime) return; // Already started
-            
-            sessionStartTime = new Date();
-            timerInterval = setInterval(updateTimer, 1000);
-            showNotification('Session timer started', 2000);
-        }
-
-        // Update timer display
-        function updateTimer() {
-            if (!sessionStartTime) return;
-            
-            const now = new Date();
-            const elapsed = new Date(now - sessionStartTime);
-            
-            const hours = String(elapsed.getUTCHours()).padStart(2, '0');
-            const minutes = String(elapsed.getUTCMinutes()).padStart(2, '0');
-            const seconds = String(elapsed.getUTCSeconds()).padStart(2, '0');
-            
-            sessionTimer.textContent = `${hours}:${minutes}:${seconds}`;
-            
-            // Automatically end after 1 hour (3600 seconds)
-            const elapsedSeconds = Math.floor((now - sessionStartTime) / 1000);
-            if (elapsedSeconds >= 3600) {
-                endVideoSession();
-            }
-        }
-
         // Fetch Provider Data
         async function fetchProviderData(email) {
             try {
