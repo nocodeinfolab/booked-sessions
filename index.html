@@ -581,31 +581,16 @@
         let clientJoined = false;
         let room = null;
         
-        // Create reference to LiveKit client from global scope
-        let LiveKitClient;
-        
-        // Wait for LiveKit to load
-        function waitForLiveKit() {
-            return new Promise((resolve) => {
-                if (window.livekit) {
-                    resolve(window.livekit);
-                } else {
-                    const checkInterval = setInterval(() => {
-                        if (window.livekit) {
-                            clearInterval(checkInterval);
-                            resolve(window.livekit);
-                        }
-                    }, 100);
-                }
-            });
-        }
+        // LiveKit Client Reference
+        const LiveKitClient = window.livekit;
 
         // Initialize Dashboard
         document.addEventListener('DOMContentLoaded', async () => {
             try {
-                // Wait for LiveKit to be available
-                LiveKitClient = await waitForLiveKit();
-                
+                if (!LiveKitClient) {
+                    throw new Error('LiveKit client failed to load');
+                }
+
                 const urlParams = new URLSearchParams(window.location.search);
                 const providerEmail = urlParams.get('email');
                 
@@ -614,15 +599,15 @@
                     return;
                 }
                 
-                fetchProviderData(providerEmail);
+                await fetchProviderData(providerEmail);
                 
                 // Event listeners for video call modal
                 closeModal.addEventListener('click', closeVideoCall);
                 endSessionBtn.addEventListener('click', endVideoSession);
                 
             } catch (error) {
-                console.error('Failed to initialize LiveKit:', error);
-                showNotification('Failed to initialize video system', 3000);
+                console.error('Initialization error:', error);
+                showNotification('Failed to initialize application', 3000);
             }
         });
 
@@ -694,13 +679,8 @@
             livekitContainer.innerHTML = '';
             
             try {
-                if (!LiveKitClient) {
-                    throw new Error('LiveKit client not initialized');
-                }
-
                 // Connect to the LiveKit room
                 room = new LiveKitClient.Room({
-                    // Enable more detailed logging
                     logger: console,
                     loggerLevel: 'debug'
                 });
@@ -727,9 +707,8 @@
                         endVideoSession();
                     });
                 
-                // Connect to the room with more options
+                // Connect to the room
                 await room.connect('wss://psy-cliniq-s70l8vu6.livekit.cloud', token, {
-                    // Additional connection options
                     autoSubscribe: true,
                     maxRetries: 3,
                     timeout: 10000
@@ -737,7 +716,7 @@
                 
                 console.log('Successfully connected to room');
                 
-                // Create local video track with error handling
+                // Create local video track
                 try {
                     const localVideoTrack = await LiveKitClient.createLocalVideoTrack({
                         resolution: 'hd',
@@ -755,7 +734,7 @@
                     showNotification('Could not access camera', 3000);
                 }
                 
-                // Handle remote tracks with more robust checks
+                // Handle remote tracks
                 room.participants.forEach(participant => {
                     participant.tracks.forEach(publication => {
                         if (publication.track && publication.kind === LiveKitClient.Track.Kind.Video) {
@@ -844,6 +823,7 @@
                 showNotification('Error ending session', 3000);
             }
         }
+
 
         // Fetch Provider Data
         async function fetchProviderData(email) {
