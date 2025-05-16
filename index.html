@@ -582,7 +582,23 @@
         let room = null;
         
         // Create reference to LiveKit client from global scope
-        const LiveKitClient = window.livekit;
+        let LiveKitClient;
+        
+        // Wait for LiveKit to load
+        function waitForLiveKit() {
+            return new Promise((resolve) => {
+                if (window.livekit) {
+                    resolve(window.livekit);
+                } else {
+                    const checkInterval = setInterval(() => {
+                        if (window.livekit) {
+                            clearInterval(checkInterval);
+                            resolve(window.livekit);
+                        }
+                    }, 100);
+                }
+            });
+        }
 
         // Initialize Dashboard
         document.addEventListener('DOMContentLoaded', () => {
