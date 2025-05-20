@@ -394,54 +394,6 @@
                 width: auto;
             }
         }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-        }
-
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 90%;
-            height: 90%;
-            border: none;
-        }
-
-        .modal-header {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            background-color: var(--primary);
-            color: white;
-            padding: 10px;
-            border-radius: var(--radius-sm);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 1001;
-        }
-
-        .close-modal {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.5rem;
-            cursor: pointer;
-        }
-
-        .session-timer {
-            font-weight: 600;
-            color: white;
-        }
     </style>
 </head>
 <body>
@@ -501,14 +453,6 @@
     </main>
 
     <div class="notification" id="notification"></div>
-    <div class="modal" id="videoCallModal">
-        <div class="modal-header">
-            <div class="session-timer" id="sessionTimer">05:00</div>
-            <button class="close-modal" id="closeModal">&times;</button>
-        </div>
-        <iframe id="jitsiFrame" class="modal-content" allow="camera; microphone; fullscreen; display-capture"></iframe>
-    </div>
-
 
     <script>
         // DOM Elements
@@ -522,17 +466,11 @@
         const pendingCount = document.getElementById('pendingCount');
         const unpaidCount = document.getElementById('unpaidCount');
         const totalCount = document.getElementById('totalCount');
-        const videoCallModal = document.getElementById('videoCallModal');
-        const jitsiFrame = document.getElementById('jitsiFrame');
-        const closeModal = document.getElementById('closeModal');
-        const sessionTimer = document.getElementById('sessionTimer');
 
         // Global Variables
         let providerData = null;
         let bookedSessions = [];
         let filteredSessions = [];
-        let timerInterval = null;
-        let currentSessionId = null;
 
         // Initialize Dashboard
         document.addEventListener('DOMContentLoaded', async () => {
@@ -545,82 +483,7 @@
             }
             
             await fetchProviderData(providerEmail);
-            
-            // Add event listeners for video call modal
-            closeModal.addEventListener('click', closeVideoCall);
         });
-
-        // Generate a simple room name
-        function generateRoomName() {
-            const randomNum = Math.floor(1000 + Math.random() * 9000);
-            return `psyclinic-${randomNum}`;
-        }
-
-        // Start video session with Jitsi
-        async function startVideoSession(sessionId) {
-            currentSessionId = sessionId;
-            const roomName = generateRoomName();
-            
-            try {
-                // Update the session with room name
-                await fetch('https://firebase-backend-6arf.onrender.com/update_session_room', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        session_id: sessionId,
-                        room_name: roomName
-                    })
-                });
-
-                // Open Jitsi in iframe
-                jitsiFrame.src = `https://meet.jit.si/${roomName}`;
-                videoCallModal.style.display = 'block';
-                document.body.style.overflow = 'hidden';
-                
-                // Start 5 minute countdown
-                startSessionTimer();
-                
-            } catch (error) {
-                console.error('Error starting session:', error);
-                showNotification(`Failed to start session: ${error.message}`, 3000);
-            }
-        }
-
-        function startSessionTimer() {
-            let timeLeft = 5 * 60; // 5 minutes in seconds
-            
-            // Update immediately
-            updateTimerDisplay(timeLeft);
-            
-            timerInterval = setInterval(() => {
-                timeLeft--;
-                updateTimerDisplay(timeLeft);
-                
-                if (timeLeft <= 0) {
-                    closeVideoCall();
-                    showNotification('Session has ended after 5 minutes', 5000);
-                }
-            }, 1000);
-        }
-
-        function updateTimerDisplay(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            sessionTimer.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        function closeVideoCall() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-            
-            // Reset iframe
-            jitsiFrame.src = '';
-            videoCallModal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-            sessionTimer.textContent = '05:00';
-        }
 
         // Fetch Provider Data
         async function fetchProviderData(email) {
@@ -789,8 +652,8 @@
                             `<button class="btn btn-primary confirm-btn" data-session-id="${session.id}">
                                 <i class="fas fa-check"></i> Confirm
                             </button>` : 
-                            `<button class="btn btn-success start-session-btn" data-session-id="${session.id}">
-                                <i class="fas fa-video"></i> Start Session
+                            `<button class="btn btn-success" disabled>
+                                <i class="fas fa-check-circle"></i> Confirmed
                             </button>`
                         }
                     </div>
@@ -804,14 +667,6 @@
                 button.addEventListener('click', () => {
                     const sessionId = button.getAttribute('data-session-id');
                     confirmAppointment(sessionId);
-                });
-            });
-            
-            // Add event listeners to start session buttons
-            document.querySelectorAll('.start-session-btn').forEach(button => {
-                button.addEventListener('click', () => {
-                    const sessionId = button.getAttribute('data-session-id');
-                    startVideoSession(sessionId);
                 });
             });
         }
