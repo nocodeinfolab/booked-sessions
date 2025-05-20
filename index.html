@@ -6,6 +6,7 @@
     <title>Provider Dashboard | PsyClinic</title>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@latest/dist/livekit-client.umd.min.js"></script>
     <style>
         :root {
             --primary: #3a86ff;
@@ -310,6 +311,135 @@
             transform: translateX(-50%) translateY(-10px);
         }
 
+        /* Video Call Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 1000px;
+            height: 90%;
+            max-height: 700px;
+            background-color: #1a1d21;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            background-color: var(--primary);
+            color: white;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .video-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 10px;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .participant {
+            background-color: #2d3035;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .participant-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .participant-info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .participant-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            padding: 10px;
+            background-color: #2d3035;
+        }
+
+        .control-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #3a3d42;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .control-btn:hover {
+            background-color: #4a4d52;
+        }
+
+        .control-btn.end-call {
+            background-color: var(--danger);
+        }
+
+        .control-btn.end-call:hover {
+            background-color: #d23354;
+        }
+
+        .control-btn.active {
+            background-color: var(--primary);
+        }
+
         /* Tablet and Desktop Styles */
         @media (min-width: 768px) {
             .header-container {
@@ -454,6 +584,30 @@
 
     <div class="notification" id="notification"></div>
 
+    <!-- Video Call Modal -->
+    <div class="modal" id="videoCallModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div id="roomNameDisplay">Room: Loading...</div>
+                <button class="close-modal" id="closeModal">&times;</button>
+            </div>
+            <div class="video-container" id="videoContainer">
+                <!-- Participant videos will be added here dynamically -->
+            </div>
+            <div class="controls">
+                <button class="control-btn" id="toggleMic">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button class="control-btn" id="toggleCam">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="control-btn end-call" id="endCall">
+                    <i class="fas fa-phone-slash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // DOM Elements
         const providerName = document.getElementById('providerName');
@@ -466,11 +620,26 @@
         const pendingCount = document.getElementById('pendingCount');
         const unpaidCount = document.getElementById('unpaidCount');
         const totalCount = document.getElementById('totalCount');
+        
+        // Video Call Elements
+        const videoCallModal = document.getElementById('videoCallModal');
+        const closeModal = document.getElementById('closeModal');
+        const videoContainer = document.getElementById('videoContainer');
+        const toggleMic = document.getElementById('toggleMic');
+        const toggleCam = document.getElementById('toggleCam');
+        const endCall = document.getElementById('endCall');
+        const roomNameDisplay = document.getElementById('roomNameDisplay');
 
         // Global Variables
         let providerData = null;
         let bookedSessions = [];
         let filteredSessions = [];
+        
+        // LiveKit Variables
+        let room = null;
+        let currentSessionId = null;
+        let roomName = '';
+        let participants = {};
 
         // Initialize Dashboard
         document.addEventListener('DOMContentLoaded', async () => {
@@ -483,7 +652,292 @@
             }
             
             await fetchProviderData(providerEmail);
+            
+            // Add event listeners for video call modal
+            closeModal.addEventListener('click', endVideoCall);
+            toggleMic.addEventListener('click', toggleMicrophone);
+            toggleCam.addEventListener('click', toggleCamera);
+            endCall.addEventListener('click', endVideoCall);
         });
+
+        // Start video session with LiveKit
+        async function startVideoSession(sessionId) {
+            currentSessionId = sessionId;
+            const session = bookedSessions.find(s => s.id === sessionId);
+            
+            if (!session) {
+                showNotification('Session not found', 3000);
+                return;
+            }
+            
+            // Generate a consistent room name based on session ID
+            roomName = `psyclinic-session-${sessionId}`;
+            
+            try {
+                // First update the session with room name in your database
+                await fetch('https://firebase-backend-6arf.onrender.com/update_session_room', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        session_id: sessionId,
+                        room_name: roomName
+                    })
+                });
+
+                // Open the video call modal
+                videoCallModal.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+                roomNameDisplay.textContent = `Room: ${roomName}`;
+                
+                // Connect to LiveKit room as provider
+                await connectToRoom(roomName, providerData.full_name, true);
+                
+            } catch (error) {
+                console.error('Error starting session:', error);
+                showNotification(`Failed to start session: ${error.message}`, 3000);
+            }
+        }
+
+        // Connect to LiveKit room
+        async function connectToRoom(roomName, participantName, isProvider) {
+            try {
+                // Get a token from your server
+                const tokenResponse = await fetch('https://firebase-backend-6arf.onrender.com/get_livekit_token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        room_name: roomName,
+                        participant_name: participantName,
+                        is_provider: isProvider
+                    })
+                });
+                
+                if (!tokenResponse.ok) {
+                    throw new Error('Failed to get token');
+                }
+                
+                const { token } = await tokenResponse.json();
+                
+                // Connect to the room
+                room = new LiveKitClient.Room();
+                
+                await room.connect(
+                    'wss://your-livekit-server.com', // Replace with your LiveKit server URL
+                    token,
+                    {
+                        // Automatically manage subscriptions for better performance
+                        autoSubscribe: true,
+                        // Enable adaptive streaming
+                        adaptiveStream: true
+                    }
+                );
+                
+                // Set up event listeners
+                setupRoomListeners();
+                
+                // Publish local tracks
+                await publishLocalTracks();
+                
+            } catch (error) {
+                console.error('Error connecting to room:', error);
+                showNotification('Failed to connect to video call', 3000);
+                endVideoCall();
+            }
+        }
+
+        // Publish local audio and video tracks
+        async function publishLocalTracks() {
+            try {
+                // Get local audio and video tracks
+                const localTracks = await LiveKitClient.createLocalTracks({
+                    audio: true,
+                    video: { 
+                        width: 1280,
+                        height: 720,
+                        facingMode: 'user'
+                    }
+                });
+                
+                // Publish tracks to the room
+                await room.localParticipant.publishTracks(localTracks);
+                
+                // Update UI to show local participant
+                addParticipantVideo(room.localParticipant);
+                
+                // Enable controls
+                toggleMic.classList.add('active');
+                toggleCam.classList.add('active');
+                
+            } catch (error) {
+                console.error('Error publishing tracks:', error);
+                showNotification('Failed to start camera/microphone', 3000);
+            }
+        }
+
+        // Set up room event listeners
+        function setupRoomListeners() {
+            // Participant connected
+            room.on('participantConnected', participant => {
+                addParticipantVideo(participant);
+            });
+            
+            // Participant disconnected
+            room.on('participantDisconnected', participant => {
+                removeParticipantVideo(participant);
+            });
+            
+            // Track published
+            room.on('trackPublished', publication => {
+                if (publication.track) {
+                    updateParticipantVideo(publication.participant);
+                }
+            });
+            
+            // Track unpublished
+            room.on('trackUnpublished', publication => {
+                updateParticipantVideo(publication.participant);
+            });
+            
+            // Track subscribed
+            room.on('trackSubscribed', (track, publication, participant) => {
+                updateParticipantVideo(participant);
+            });
+            
+            // Track unsubscribed
+            room.on('trackUnsubscribed', (track, publication, participant) => {
+                updateParticipantVideo(participant);
+            });
+            
+            // Disconnected from room
+            room.on('disconnected', () => {
+                endVideoCall();
+            });
+        }
+
+        // Add participant video element
+        function addParticipantVideo(participant) {
+            if (participants[participant.sid]) return;
+            
+            const participantEl = document.createElement('div');
+            participantEl.className = 'participant';
+            participantEl.id = `participant-${participant.sid}`;
+            
+            const videoEl = document.createElement('video');
+            videoEl.className = 'participant-video';
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            
+            const infoEl = document.createElement('div');
+            infoEl.className = 'participant-info';
+            
+            const avatarEl = document.createElement('div');
+            avatarEl.className = 'participant-avatar';
+            avatarEl.innerHTML = `<i class="fas fa-user"></i>`;
+            
+            const nameEl = document.createElement('div');
+            nameEl.className = 'participant-name';
+            nameEl.textContent = participant.identity;
+            
+            infoEl.appendChild(avatarEl);
+            infoEl.appendChild(nameEl);
+            participantEl.appendChild(videoEl);
+            participantEl.appendChild(infoEl);
+            
+            videoContainer.appendChild(participantEl);
+            participants[participant.sid] = participantEl;
+            
+            // Attach tracks if they exist
+            updateParticipantVideo(participant);
+        }
+
+        // Update participant video with their tracks
+        function updateParticipantVideo(participant) {
+            const participantEl = participants[participant.sid];
+            if (!participantEl) return;
+            
+            const videoEl = participantEl.querySelector('video');
+            if (!videoEl) return;
+            
+            // Clear existing tracks
+            videoEl.srcObject = null;
+            
+            // Get all video tracks from participant
+            const videoTracks = Array.from(participant.videoTracks.values())
+                .map(pub => pub.track)
+                .filter(track => track !== undefined);
+            
+            // Get all audio tracks (we won't attach these to video elements)
+            const audioTracks = Array.from(participant.audioTracks.values())
+                .map(pub => pub.track)
+                .filter(track => track !== undefined);
+            
+            // If there are video tracks, attach them
+            if (videoTracks.length > 0) {
+                const stream = new MediaStream();
+                videoTracks.forEach(track => stream.addTrack(track.mediaStreamTrack));
+                videoEl.srcObject = stream;
+            }
+        }
+
+        // Remove participant video element
+        function removeParticipantVideo(participant) {
+            const participantEl = participants[participant.sid];
+            if (participantEl) {
+                participantEl.remove();
+                delete participants[participant.sid];
+            }
+        }
+
+        // Toggle microphone
+        async function toggleMicrophone() {
+            const audioPublications = Array.from(room.localParticipant.audioTracks.values());
+            
+            if (audioPublications.length > 0 && audioPublications[0].track) {
+                if (audioPublications[0].track.isMuted) {
+                    await room.localParticipant.setMicrophoneEnabled(true);
+                    toggleMic.classList.add('active');
+                } else {
+                    await room.localParticipant.setMicrophoneEnabled(false);
+                    toggleMic.classList.remove('active');
+                }
+            }
+        }
+
+        // Toggle camera
+        async function toggleCamera() {
+            const videoPublications = Array.from(room.localParticipant.videoTracks.values());
+            
+            if (videoPublications.length > 0 && videoPublications[0].track) {
+                if (videoPublications[0].track.isMuted) {
+                    await room.localParticipant.setCameraEnabled(true);
+                    toggleCam.classList.add('active');
+                } else {
+                    await room.localParticipant.setCameraEnabled(false);
+                    toggleCam.classList.remove('active');
+                }
+            }
+        }
+
+        // End video call
+        async function endVideoCall() {
+            if (room) {
+                try {
+                    await room.disconnect();
+                } catch (error) {
+                    console.error('Error disconnecting:', error);
+                } finally {
+                    room = null;
+                }
+            }
+            
+            // Clear all participant videos
+            videoContainer.innerHTML = '';
+            participants = {};
+            
+            // Close modal
+            videoCallModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
 
         // Fetch Provider Data
         async function fetchProviderData(email) {
@@ -652,8 +1106,8 @@
                             `<button class="btn btn-primary confirm-btn" data-session-id="${session.id}">
                                 <i class="fas fa-check"></i> Confirm
                             </button>` : 
-                            `<button class="btn btn-success" disabled>
-                                <i class="fas fa-check-circle"></i> Confirmed
+                            `<button class="btn btn-success start-session-btn" data-session-id="${session.id}">
+                                <i class="fas fa-video"></i> Start Session
                             </button>`
                         }
                     </div>
@@ -667,6 +1121,14 @@
                 button.addEventListener('click', () => {
                     const sessionId = button.getAttribute('data-session-id');
                     confirmAppointment(sessionId);
+                });
+            });
+            
+            // Add event listeners to start session buttons
+            document.querySelectorAll('.start-session-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const sessionId = button.getAttribute('data-session-id');
+                    startVideoSession(sessionId);
                 });
             });
         }
